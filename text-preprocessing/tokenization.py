@@ -39,6 +39,7 @@ class Banking77Dataset(Dataset):
             
 if __name__ == "__main__":
     train_dataset = Banking77Dataset(split="train",max_length=64)
+    test_dataset = Banking77Dataset(split = "test", max_length = 64)
     sample = train_dataset[0]
     print("Padded tokens:", sample["input_ids"])
     print("Attention Padding: ", sample["attention_mask"])
