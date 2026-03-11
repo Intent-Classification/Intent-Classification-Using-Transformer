@@ -1,2 +1,6 @@
 .env
 .venv/
+*.pt
+__pycache__/
+*.pyc
+.cache/
