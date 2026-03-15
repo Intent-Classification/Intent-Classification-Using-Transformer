@@ -1,6 +1,26 @@
 import torch 
 import torch.nn as nn
 
+
+class LayerNorm(nn.Module):
+    def  __init__(self,emb_dim):
+        super().__init__()
+        '''
+            y = scale * xnorm + shift
+        '''
+        self.eps = 1e - 5 
+        self.scale = nn.Parameter(torch.ones(emb_dim))
+        self.shift = nn.Parameter(torch.zeros(emb_dim))
+        
+    def forward(self,x):
+        mean = x.mean(dim = -1, keepdim = True)
+        var = x.var(dim = -1, keep_dim = True, unbiased = False)
+        norm_x = (x-mean)/torch.sqrt(var+self.eps)
+        return self.scale*norm_x + self.shift
+        
+        
+        
+
 class MultiHeadATtention(nn.Module):
     def __init__(self, d_in, d_out, dropout,num_heads,qkv_bias = True ): #qkv bias helps classifer to seperate features 
         super.__init__()
@@ -29,10 +49,53 @@ class MultiHeadATtention(nn.Module):
         context_vec = (attn_weights @ values).transpose(1,2)
         context_vec = context_vec.contiguous().view(b,num_tokens,self.d_out)
         return self.out_proj(context_vec)
-            
+    
+class TransformerBlock(nn.Module):
+    def __init__(self,cfg):
+        super().__init__()
+        self.att = MultiHeadATtention(
+            d_in = cfg["emb_dim"], 
+            d_out = cfg ["emb_dim"],
+            dropout = cfg["drop_rate"],
+            num_heads = cfg ["n_heads"],
+            qkv_bias = True,           
+        )
+        # self.ff = FeedForward(cfg)
+        self.norm1 = LayerNorm(cfg["emb_dim"])
+        self.norm2 = LayerNorm(cfg["emb_dim"])
+        self.drop = nn.Dropout(cfg["drop_rate"])
         
+    def forward(self,x, attention_mask = None):
+
+        shortcut = x 
+        x = self.norm1(x)
+        x = self.att(x,attention_mask)
+        x = self.drop(x)
+        x = x + shortcut
         
+        shortcut = x 
+        x = self.norm2(x)
+        x = self.ff(x)
+        x = self.drop(x)
+        x = x + shortcut 
+        return x 
+
+class IntentClassifier(nn.Module):
+    def __init__(self,cfg, num_classes, pool = "mean"):
+        super().__init__()
+        self.pool = pool 
+        self.input_drop = nn.Dropout(cfg["drop_rate"])
         
+        self.blocks = nn.ModuleList([
+            TransformerBlock() for _ in range(cfg["n_layers"])
+        ])
+        
+        self.classifier = nn.Sequential(
+            nn.Dropout(cfg["drop_rate"]),
+            nn.Linear(cfg["emb_dim"],cfg["emb_dim"]),
+            nn. GELU(),
+            nn.Linear(cfg["emb_dim"],num_classes)
+        )
         
         
         
