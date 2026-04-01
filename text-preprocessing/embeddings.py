@@ -31,12 +31,13 @@ class BertEmbedder:
 
 def collect_embeddings(loader, embedder):
     """Run a DataLoader through the embedder and return (embeddings, labels)."""
-    all_embeddings, all_labels = [], []
+    all_embeddings, all_labels, all_attention_mask = [], [], []
     for batch in loader:
-        emb = embedder.get_embeddings(batch["input_ids"], batch["attention_mask"])
-        all_embeddings.append(emb.cpu())
+        emb = embedder.get_embeddings(batch["input_ids"], batch["attention_mask"]) 
+        all_embeddings.append(emb.cpu()) #
+        all_attention_mask.append(batch["attention_mask"])#The attention mask here is used for computation to not let padding affect attention token, not to save in .pt file.
         all_labels.append(batch["label"])
-    return torch.cat(all_embeddings, dim=0), torch.cat(all_labels, dim=0)
+    return torch.cat(all_embeddings, dim=0), torch.cat (all_attention_mask, dim = 0), torch.cat(all_labels, dim=0)
 
 
 if __name__ == "__main__":
@@ -52,8 +53,8 @@ if __name__ == "__main__":
     train_dataset = Banking77Dataset(split="train", max_length=MAX_LENGTH)
     train_loader  = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    all_embeddings, all_labels = collect_embeddings(train_loader, embedder)
-    print(f"Full train — embeddings: {all_embeddings.shape}, labels: {all_labels.shape}")
+    all_embeddings,all_attention_mask, all_labels = collect_embeddings(train_loader, embedder)
+    print(f"Full train — embeddings: {all_embeddings.shape}, attention_mask : {all_attention_mask.shape}, labels: {all_labels.shape}")
 
     # ── Train / val split ──────────────────────────────────────────────────────
     n         = len(all_labels)
@@ -67,26 +68,32 @@ if __name__ == "__main__":
     val_idx   = idx[:val_size]      # smaller portion
 
     torch.save(
-        {"embeddings": all_embeddings[train_idx], "labels": all_labels[train_idx]},
+        {"embeddings": all_embeddings[train_idx], 
+        "attention_mask": all_attention_mask[train_idx],
+        "labels": all_labels[train_idx]},
         "train_embeddings.pt"
     )
     print(f"Saved train_embeddings.pt  ({train_size} samples)")
 
     torch.save(
-        {"embeddings": all_embeddings[val_idx], "labels": all_labels[val_idx]},
+        {"embeddings": all_embeddings[val_idx],
+        "attention_mask": all_attention_mask[val_idx],
+         "labels": all_labels[val_idx]},
         "val_embeddings.pt"
     )
     print(f"Saved val_embeddings.pt    ({val_size} samples)")
 
-    # ── Test embeddings (untouched) ────────────────────────────────────────────
+    # ── Test embeddings  ────────────────────────────────────────────
     test_dataset = Banking77Dataset(split="test", max_length=MAX_LENGTH)
     test_loader  = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    test_embeddings, test_labels = collect_embeddings(test_loader, embedder)
+    test_embeddings, test_attention_mask, test_labels = collect_embeddings(test_loader, embedder)
     print(f"\nTest — embeddings: {test_embeddings.shape}, labels: {test_labels.shape}")
 
     torch.save(
-        {"embeddings": test_embeddings, "labels": test_labels},
+        {"embeddings": test_embeddings, 
+         "attention_mask": test_attention_mask,
+         "labels": test_labels},
         "test_embeddings.pt"
     )
     print("Saved test_embeddings.pt")

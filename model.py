@@ -1,6 +1,16 @@
 import torch 
 import torch.nn as nn
 
+BANKING77_CONFIG = {
+    "emb_dim"        : 768,   # BERT base hidden size
+    "n_heads"        : 12,
+    "n_layers"       : 4,     # lighter than GPT-2's 12  tune as needed
+    "drop_rate"      : 0.1,
+    "context_length" : 128,   # unused now but keep for compatibility
+    "vocab_size"     : None,  # not needed, using pre-computed embeddings
+    "qkv_bias"       : True
+}
+
 
 class LayerNorm(nn.Module):
     def  __init__(self,emb_dim):
