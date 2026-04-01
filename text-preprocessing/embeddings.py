@@ -10,13 +10,13 @@ load_dotenv()
 hf_token = os.environ.get('HF_TOKEN')
 
 class BertEmbedder:
-    def __init__(self,device=None):
+    def __init__(self, device=None):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = BertModel.from_pretrained('bert-base-uncased', token = hf_token)
+        self.model = BertModel.from_pretrained('bert-base-uncased', token=hf_token)
         self.model.to(self.device)
-        self.model.eval() #Disable dropout and batch normalization, not training only loading embedding
+        self.model.eval()
     
-    def get_embeddings(self,input_ids, attention_mask):
+    def get_embeddings(self, input_ids, attention_mask):
         input_ids = input_ids.to(self.device)
         attention_mask = attention_mask.to(self.device)
         
@@ -26,56 +26,67 @@ class BertEmbedder:
                 attention_mask=attention_mask
             )
         
-        cls_embeddings = outputs.last_hidden_state
-        return cls_embeddings
+        return outputs.last_hidden_state  # (B, seq_len, hidden)
     
-if __name__== "__main__":
-    train_dataset = Banking77Dataset(split = "train", max_length =64)
-    train_loader = DataLoader(train_dataset,batch_size=32,shuffle = False)
-    
+
+def collect_embeddings(loader, embedder):
+    """Run a DataLoader through the embedder and return (embeddings, labels)."""
+    all_embeddings, all_labels = [], []
+    for batch in loader:
+        emb = embedder.get_embeddings(batch["input_ids"], batch["attention_mask"])
+        all_embeddings.append(emb.cpu())
+        all_labels.append(batch["label"])
+    return torch.cat(all_embeddings, dim=0), torch.cat(all_labels, dim=0)
+
+
+if __name__ == "__main__":
+    SEED       = 42
+    VAL_RATIO  = 0.15
+    MAX_LENGTH = 64
+    BATCH_SIZE = 32
+
     embedder = BertEmbedder()
-    all_embeddings = []
-    all_labels = []
-    
-    print(f"Generating Embeddings on: {embedder.device}")
-    
-    for batch_idx,batch in enumerate(train_loader):
-        input_ids = batch["input_ids"]
-        attention_mask = batch["attention_mask"]
-        labels = batch["label"]
-        
-        embeddings = embedder.get_embeddings(input_ids,attention_mask)
-        
-        all_embeddings.append(embeddings.to('cpu'))
-        all_labels.append(labels)
-        
-        if batch_idx == 0:
-            print(f"Batch 0 — embedding shape: {embeddings.shape}")
-            print(f"Sample embedding (first 8 dims): {embeddings[0,0, :8]}")
-            
-    all_embeddings = torch.cat(all_embeddings,dim=0)
-    all_labels = torch.cat(all_labels, dim=0)
-    
-    print(f"\nFinal embeddings shape: {all_embeddings.shape}")
-    print(f"Final labels shape:     {all_labels.shape}")
-    
-    ''' Saving for classifier'''    
-    
-    torch.save({"embeddings":all_embeddings, "labels":all_labels}, "train_embeddings.pt")
-    print("Saved to train_embeddings.pt")
-    
-    test_dataset = Banking77Dataset(split="test", max_length=64)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-    all_test_embeddings = []
-    all_test_labels = []
+    print(f"Generating embeddings on: {embedder.device}\n")
 
-    for batch in test_loader:
-        embeddings = embedder.get_embeddings(batch["input_ids"], batch["attention_mask"])
-        all_test_embeddings.append(embeddings.to('cpu'))
-        all_test_labels.append(batch["label"])
+    # ── Train embeddings ───────────────────────────────────────────────────────
+    train_dataset = Banking77Dataset(split="train", max_length=MAX_LENGTH)
+    train_loader  = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    all_test_embeddings = torch.cat(all_test_embeddings, dim=0)
-    all_test_labels = torch.cat(all_test_labels, dim=0)
+    all_embeddings, all_labels = collect_embeddings(train_loader, embedder)
+    print(f"Full train — embeddings: {all_embeddings.shape}, labels: {all_labels.shape}")
 
-    torch.save({"embeddings": all_test_embeddings, "labels": all_test_labels}, "test_embeddings.pt")
-    print("Saved to test_embeddings.pt")
+    # ── Train / val split ──────────────────────────────────────────────────────
+    n         = len(all_labels)
+    val_size  = int(VAL_RATIO * n)
+    train_size = n - val_size
+
+    # Reproducible shuffle
+    idx = torch.randperm(n, generator=torch.Generator().manual_seed(SEED))
+
+    train_idx = idx[val_size:]      # larger portion
+    val_idx   = idx[:val_size]      # smaller portion
+
+    torch.save(
+        {"embeddings": all_embeddings[train_idx], "labels": all_labels[train_idx]},
+        "train_embeddings.pt"
+    )
+    print(f"Saved train_embeddings.pt  ({train_size} samples)")
+
+    torch.save(
+        {"embeddings": all_embeddings[val_idx], "labels": all_labels[val_idx]},
+        "val_embeddings.pt"
+    )
+    print(f"Saved val_embeddings.pt    ({val_size} samples)")
+
+    # ── Test embeddings (untouched) ────────────────────────────────────────────
+    test_dataset = Banking77Dataset(split="test", max_length=MAX_LENGTH)
+    test_loader  = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+
+    test_embeddings, test_labels = collect_embeddings(test_loader, embedder)
+    print(f"\nTest — embeddings: {test_embeddings.shape}, labels: {test_labels.shape}")
+
+    torch.save(
+        {"embeddings": test_embeddings, "labels": test_labels},
+        "test_embeddings.pt"
+    )
+    print("Saved test_embeddings.pt")
