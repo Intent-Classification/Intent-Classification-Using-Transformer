@@ -6,3 +6,5 @@ __pycache__/
 .cache/
 training.txt
 test.py
+training.py
+test1.py

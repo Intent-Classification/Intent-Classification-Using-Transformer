@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from transformers import BertModel
 from dotenv import load_dotenv
-from tokenization import Banking77Dataset
+from text_preprocessing.tokenization import Banking77Dataset
 from torch.utils.data import DataLoader
 import os 
 
