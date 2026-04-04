@@ -4,8 +4,8 @@ import torch.nn as nn
 BANKING77_CONFIG = {
     "emb_dim"        : 768,   # BERT base hidden size
     "n_heads"        : 12,
-    "n_layers"       : 4,     # lighter than GPT-2's 12  tune as needed
-    "drop_rate"      : 0.1,
+    "n_layers"       : 2,     # bert extracted features already so reducing it from 4 -> 2, we had obverfitting problem because bert did heavy work
+    "drop_rate"      : 0.3,
     "context_length" : 128,   # unused now but keep for compatibility
     "vocab_size"     : None,  # not needed, using pre-computed embeddings
     "qkv_bias"       : True
@@ -24,8 +24,8 @@ class LayerNorm(nn.Module):
         
         
     def forward(self,x):
-        mean = x.mean(dim = -1, keep_dim = True)
-        var = x.var(dim = -1, keep_dim = True, unbiased = False)
+        mean = x.mean(dim = -1, keepdim = True)
+        var = x.var(dim = -1, keepdim = True, unbiased = False)
         norm_x = (x-mean)/torch.sqrt(var+self.eps)
         return self.scale*norm_x + self.shift
         
