@@ -127,15 +127,20 @@ class IntentClassifier(nn.Module):
             nn.Linear(cfg["emb_dim"],num_classes)
         )
     
-    def forward(self,x,attention_mask = None):
+    def forward(self, x, attention_mask=None):
         x = self.input_drop(x)
         
         for block in self.blocks:
-            x  = block(x, attention_mask)
-            
-        x = x.mean(dim = 1)
+            x = block(x, attention_mask)
+        
+        # Masked mean pooling — ignore padding tokens
+        if attention_mask is not None:
+            mask = attention_mask.unsqueeze(-1).float()        # [batch, seq_len, 1]
+            x = (x * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)  # weighted mean
+        else:
+            x = x.mean(dim=1)                                 # fallback
         
         return self.classifier(x)
-    
+        
         
         
