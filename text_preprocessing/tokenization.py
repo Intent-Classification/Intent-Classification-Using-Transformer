@@ -15,9 +15,10 @@ class Banking77Dataset(Dataset):
         self.max_length = max_length
         
         raw = load_dataset('mteb/banking77')
-        self.data = raw[split]
+        self.data = raw[split] 
+        #data stores the Banking77 examples loaded from Hugging Face.
         
-    def __len__(self):  
+    def __len__(self):   #Abstract method, helps to use dataloader later
             return len(self.data)
         
     def __getitem__(self,idx):

@@ -29,12 +29,12 @@ class LayerNorm(nn.Module):
         norm_x = (x-mean)/torch.sqrt(var+self.eps)
         return self.scale*norm_x + self.shift
         
-class GELU(nn.Module):
-    def __init__(self):
-        super().__init__()
+# class GELU(nn.Module):
+#     def __init__(self):
+#         super().__init__()
         
-    def forward(self,x):
-        return 0.5* x *(1 + torch.tanh(torch.sqrt(torch.tensor(2/torch.pi)) * (x + 0.044715 * torch.pow(x,3))))
+#     def forward(self,x):
+#         return 0.5* x *(1 + torch.tanh(torch.sqrt(torch.tensor(2/torch.pi)) * (x + 0.044715 * torch.pow(x,3))))
      
     
         
@@ -43,7 +43,7 @@ class FeedForward(nn.Module):
         super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(cfg["emb_dim"],4*cfg["emb_dim"]),
-            GELU(),
+            nn.GELU(),
             nn.Linear(4*cfg["emb_dim"], cfg["emb_dim"])
         )
         
@@ -71,7 +71,21 @@ class MultiHeadATtention(nn.Module):
         queries = self.W_query(x).view(b,num_tokens,self.num_heads,self.head_dim).transpose(1,2)
         values = self.W_value(x).view(b,num_tokens,self.num_heads,self.head_dim).transpose(1,2)
         
-        attn_scores = queries @ keys.transpose(2,3) /self.head_dim ** 0.5
+        attn_scores = queries @ keys.transpose(2,3) / (self.head_dim ** 0.5)
+        
+        if attention_mask is not None:
+        # attention_mask: [batch, seq_len], where 1 = real token, 0 = padding
+            key_mask = attention_mask[:, None, None, :].bool()
+            attn_scores = attn_scores.masked_fill(
+                ~key_mask,
+                torch.finfo(attn_scores.dtype).min
+            )
+            
+            ''' Without this mask, the attention layer can incorrectly use [PAD] token embeddings
+            as keys/values. That is bad because padding is not real text. Your pooling mask ignores
+            padding at the final mean-pooling step, but by then the
+            padding tokens may already have influenced the real token representations
+            through self-attention.'''
         
         attn_weights = torch.softmax(attn_scores, dim = -1)
         attn_weights = self.dropout(attn_weights)
@@ -123,7 +137,7 @@ class IntentClassifier(nn.Module):
         self.classifier = nn.Sequential(
             nn.Dropout(cfg["drop_rate"]),
             nn.Linear(cfg["emb_dim"],cfg["emb_dim"]),
-            GELU(),
+            nn.GELU(),
             nn.Linear(cfg["emb_dim"],num_classes)
         )
     
